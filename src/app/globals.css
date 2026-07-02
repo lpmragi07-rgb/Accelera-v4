@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  /* Tokens da identidade "V4 Company": vermelho sobre preto */
+  --red: 236, 28, 36;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Atmosfera V4: glow vermelho à direita + brilho sutil, sobre preto */
+  background-image:
+    radial-gradient(46rem 46rem at 88% 18%, rgba(var(--red), 0.16), transparent 58%),
+    radial-gradient(40rem 40rem at 8% 110%, rgba(var(--red), 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Camada de textura: grão fino sobre o preto (não captura cliques) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Hairlines sutis verticais (brancas) sobre o preto */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  background-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(100% - 1px),
+    rgba(255, 255, 255, 0.02) calc(100% - 1px)
+  );
+  background-size: 7.5rem 100%;
+  mask-image: radial-gradient(80rem 60rem at 50% 0%, #000, transparent 75%);
+}
+
+/* Garante que o conteúdo fique acima das camadas de textura */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Faixa fina de acento no topo absoluto da página (detalhe de marca) */
+.brand-rule {
+  background-image: linear-gradient(
+    90deg,
+    rgba(var(--red), 1),
+    rgba(var(--red), 0.4) 45%,
+    transparent
+  );
+}
+
+/* Seleção de texto com o vermelho da marca */
+::selection {
+  background: rgba(var(--red), 0.3);
+  color: #ffffff;
+}
+
+/* Remove o fundo amarelo do autofill do navegador nos campos brancos,
+   mantendo fundo branco e texto escuro (Chrome/Safari). */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #18181b;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #18181b;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Barra de rolagem discreta para o painel premium */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-ink/10 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-ink/20;
+}
+
+/* Atrasos escalonados para revelar elementos em sequência no carregamento */
+.animate-rise:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.animate-rise:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.animate-rise:nth-child(4) {
+  animation-delay: 0.21s;
+}
+.animate-rise:nth-child(5) {
+  animation-delay: 0.28s;
+}
+
+/* Etiqueta editorial (eyebrow) reutilizável: versalete espaçado com hairline */
+.eyebrow {
+  @apply inline-flex items-center gap-2 text-[0.7rem] font-medium uppercase tracking-eyebrow text-ink-muted;
+}
+.eyebrow::before {
+  content: "";
+  @apply h-px w-6 bg-accent/70;
+}

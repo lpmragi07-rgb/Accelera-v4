@@ -362,15 +362,15 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
     <>
       <Navbar userEmail={userEmail} />
 
-      <main className="mx-auto max-w-6xl px-5 py-12">
-        <header className="mb-12 animate-rise border-b border-ink/10 pb-10">
-          <p className="eyebrow mb-4">Relatório diário · por operador e campanha</p>
-          <h1 className="font-serif text-6xl font-semibold leading-[0.95] tracking-tight sm:text-7xl">
+      <main className="mx-auto max-w-6xl px-5 py-12 print:px-0 print:py-4">
+        <header className="mb-12 animate-rise border-b border-ink/10 pb-10 print:mb-4 print:pb-4">
+          <p className="eyebrow mb-4 print:hidden">Relatório diário · por operador e campanha</p>
+          <h1 className="font-serif text-6xl font-semibold leading-[0.95] tracking-tight sm:text-7xl print:text-3xl">
             Relatório do
-            <br />
-            <span className="italic text-accent">Operador</span>
+            <br className="print:hidden" />
+            <span className="italic text-accent"> Operador</span>
           </h1>
-          <p className="mt-5 max-w-xl text-ink-muted">
+          <p className="mt-5 max-w-xl text-ink-muted print:hidden">
             Veja o desempenho do dia numa campanha específica, ou abra o painel de um operador com tudo que ele já
             fez em todas as campanhas — e o ranking geral entre operadores.
           </p>
@@ -456,8 +456,8 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
         )}
 
         {showReport && (
-          <div className="space-y-8">
-            <div className="flex flex-wrap items-center justify-between gap-6 rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+          <div className="space-y-8 print:space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-6 rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
               <div>
                 <p className="eyebrow mb-2">Relatório diário</p>
                 <h2 className="font-serif text-3xl font-semibold tracking-tight">
@@ -481,7 +481,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
               <StatCard icon={<PhoneOutgoing size={18} />} label="Ligações no dia" value={metrics.total} />
               <StatCard icon={<PhoneForwarded size={18} />} label="Transferidas" value={metrics.transferred} tone="text-go" />
               <StatCard icon={<Voicemail size={18} />} label="Caixa postal" value={metrics.voicemail} tone="text-orange-400" />
@@ -493,7 +493,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                 <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
                   <PieChart size={20} className="text-accent" />
                   Qualificação do dia
@@ -508,7 +508,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                 />
               </div>
 
-              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                 <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
                   <TrendingUp size={20} className="text-accent" />
                   Tendência · 7 dias
@@ -519,7 +519,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             </div>
 
             {operatorRanking.length > 1 && (
-              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                 <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
                   <Users size={20} className="text-accent" />
                   Ranking de operadores nesta campanha
@@ -536,7 +536,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
               </div>
             )}
 
-            <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+            <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
               <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h2 className="font-serif text-2xl tracking-tight">
@@ -581,7 +581,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             </div>
 
             {compareCampaignId && compareStats && primaryStats && (
-              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <h2 className="font-serif text-2xl tracking-tight">Comparação direta</h2>
@@ -714,8 +714,8 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
               </div>
             </section>
 
-            <div className="space-y-8">
-              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+            <div className="space-y-8 print:space-y-4">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                 <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
                   <Award size={20} className="text-accent" />
                   Ranking de Operadores
@@ -785,7 +785,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
 
               {panelOperatorId && (
                 <>
-                  <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                  <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                     <p className="eyebrow mb-2">Painel do operador</p>
                     <h2 className="font-serif text-3xl font-semibold tracking-tight">{panelOperator?.name}</h2>
                     <p className="mt-1 text-ink-muted">
@@ -799,7 +799,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
                     <StatCard icon={<PhoneOutgoing size={18} />} label="Ligações no total" value={operatorOverallStats.total} />
                     <StatCard
                       icon={<PhoneForwarded size={18} />}
@@ -845,7 +845,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                   </div>
 
                   {!panelCampaignId && (
-                    <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                    <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card print:rounded-xl print:p-4 print:shadow-none">
                       <h2 className="mb-1 font-serif text-2xl tracking-tight">Desempenho por campanha</h2>
                       <p className="mb-6 text-sm text-ink-muted">Contribuição de {panelOperator?.name} em cada campanha que já trabalhou</p>
                       {operatorCampaignBreakdown.length === 0 ? (

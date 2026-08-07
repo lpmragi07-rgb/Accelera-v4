@@ -116,3 +116,27 @@ input:-webkit-autofill:focus {
   content: "";
   @apply h-px w-6 bg-accent/70;
 }
+
+/* Impressão/exportar PDF no tema escuro — por padrão o navegador ignora cor
+   de fundo ao imprimir e força fundo branco. print-color-adjust:exact pede
+   pra manter as cores da página mesmo assim; a textura decorativa (grão +
+   hairlines fixas) some porque "position: fixed" se comporta mal entre
+   páginas impressas. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    background: #09090b !important;
+    background-image: none !important;
+    color: #f5f5f6 !important;
+  }
+
+  body::before,
+  body::after {
+    display: none !important;
+  }
+}

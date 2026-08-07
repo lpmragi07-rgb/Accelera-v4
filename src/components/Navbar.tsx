@@ -12,9 +12,9 @@ interface NavbarProps {
 }
 
 const NAV_LINKS = [
-  { label: "Painel", href: "#painel" },
-  { label: "Operadores", href: "#operadores" },
-  { label: "Ligações", href: "#ligacoes" },
+  { label: "Painel", href: "/#painel" },
+  { label: "Operadores", href: "/#operadores" },
+  { label: "Ligações", href: "/#ligacoes" },
   { label: "Relatório", href: "/relatorio" },
 ];
 
@@ -35,7 +35,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
       {/* Faixa fina de acento da marca no topo absoluto */}
       <div className="brand-rule h-0.5 w-full" />
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <a href="#painel" className="group flex items-center gap-2.5">
+        <Link href="/" className="group flex items-center gap-2.5">
           <Image
             src="/v4logo.jpg"
             alt="V4 Company"
@@ -47,7 +47,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
           <span className="font-serif text-xl font-semibold tracking-tight">
             Accel<span className="text-accent">era</span>
           </span>
-        </a>
+        </Link>
 
         {/* Links desktop */}
         <div className="hidden items-center gap-8 md:flex">

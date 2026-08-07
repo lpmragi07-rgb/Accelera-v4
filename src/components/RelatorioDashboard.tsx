@@ -18,6 +18,9 @@ import {
   Users,
   Building2,
   Phone,
+  CalendarDays,
+  UserRound,
+  Award,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Navbar from "./Navbar";
@@ -26,7 +29,7 @@ import CampaignComparisonChart from "./CampaignComparisonChart";
 import OutcomeDonutChart from "./OutcomeDonutChart";
 import MiniTrendChart from "./MiniTrendChart";
 import StatusBadge from "./StatusBadge";
-import type { Campaign, Operator, LeadStatus, LeadOutcome } from "@/types/database";
+import type { Campaign, Operator, OperatorStatus, LeadStatus, LeadOutcome } from "@/types/database";
 
 // Recorte de "leads" só com as colunas usadas nos agregados do relatório —
 // mais leve que carregar a linha inteira (gravação, notas etc. não importam aqui).
@@ -46,6 +49,15 @@ interface DetailLeadRow {
   status: LeadStatus;
   outcome: LeadOutcome | null;
   updated_at: string;
+}
+
+// Leads sem filtro de data — usados no Painel do Operador (histórico completo).
+interface AllLeadRow {
+  id: string;
+  campaign_id: string;
+  operator_id: string | null;
+  status: LeadStatus;
+  outcome: LeadOutcome | null;
 }
 
 interface CampaignStats {
@@ -92,11 +104,18 @@ function formatFullDate(dateStr: string): string {
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
-function rankLabel(rank: number): string {
-  if (rank === 1) return "🥇 1º lugar do dia";
-  if (rank === 2) return "🥈 2º lugar do dia";
-  if (rank === 3) return "🥉 3º lugar do dia";
-  return `${rank}º lugar do dia`;
+function positionLabel(rank: number): string {
+  if (rank === 1) return "🥇 1º lugar";
+  if (rank === 2) return "🥈 2º lugar";
+  if (rank === 3) return "🥉 3º lugar";
+  return `${rank}º lugar`;
+}
+
+function rankMedal(rank: number): string {
+  if (rank === 1) return "🥇";
+  if (rank === 2) return "🥈";
+  if (rank === 3) return "🥉";
+  return `${rank}º`;
 }
 
 const COMPARISON_ROWS: { label: string; key: keyof CampaignStats; format?: "percent"; lowerIsBetter?: boolean }[] = [
@@ -118,17 +137,23 @@ interface RelatorioDashboardProps {
 export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProps) {
   const supabase = useMemo(() => createClient(), []);
 
+  const [mode, setMode] = useState<"diario" | "operador">("diario");
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [dayLeads, setDayLeads] = useState<DayLeadRow[]>([]);
   const [trendLeads, setTrendLeads] = useState<DayLeadRow[]>([]);
   const [detailLeads, setDetailLeads] = useState<DetailLeadRow[]>([]);
+  const [allLeads, setAllLeads] = useState<AllLeadRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [date, setDate] = useState(todayStr());
   const [operatorId, setOperatorId] = useState("");
   const [campaignId, setCampaignId] = useState("");
   const [compareCampaignId, setCompareCampaignId] = useState("");
+
+  const [panelOperatorId, setPanelOperatorId] = useState("");
+  const [panelCampaignId, setPanelCampaignId] = useState("");
 
   useEffect(() => {
     supabase
@@ -142,6 +167,13 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
       .select("*")
       .order("created_at", { ascending: true })
       .then(({ data }) => data && setOperators(data));
+
+    // Histórico completo (sem filtro de data) — alimenta o Painel do Operador
+    // e o ranking geral, que olham "tudo que o operador já fez", não só o dia.
+    supabase
+      .from("leads")
+      .select("id, campaign_id, operator_id, status, outcome")
+      .then(({ data }) => data && setAllLeads(data));
   }, [supabase]);
 
   const loadDayLeads = useCallback(
@@ -263,6 +295,61 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
     setCompareCampaignId((prev) => (prev === id ? "" : id));
   }
 
+  // --- Painel do Operador (histórico completo, todas as campanhas) ---
+
+  const panelCampaign = campaigns.find((c) => c.id === panelCampaignId);
+  const panelOperator = operators.find((o) => o.id === panelOperatorId);
+
+  // Leads usados no ranking geral — todo o histórico, ou só a campanha
+  // escolhida no filtro (opcional) do Painel do Operador.
+  const leaderboardLeads = useMemo(
+    () => (panelCampaignId ? allLeads.filter((l) => l.campaign_id === panelCampaignId) : allLeads),
+    [allLeads, panelCampaignId]
+  );
+
+  const operatorLeaderboard = useMemo(
+    () =>
+      operators
+        .map((o) => ({
+          operatorId: o.id,
+          operatorName: o.name,
+          ...computeStats(leaderboardLeads.filter((l) => l.operator_id === o.id)),
+        }))
+        .sort((a, b) => b.interested - a.interested),
+    [operators, leaderboardLeads]
+  );
+
+  const panelOperatorRank = panelOperatorId
+    ? operatorLeaderboard.findIndex((o) => o.operatorId === panelOperatorId) + 1 || null
+    : null;
+
+  // Tudo que o operador selecionado já fez, em todas as campanhas.
+  const operatorAllLeads = useMemo(
+    () => allLeads.filter((l) => l.operator_id === panelOperatorId),
+    [allLeads, panelOperatorId]
+  );
+  // Recorte pra uma única campanha, se o filtro opcional estiver ativo.
+  const operatorScopedLeads = useMemo(
+    () => (panelCampaignId ? operatorAllLeads.filter((l) => l.campaign_id === panelCampaignId) : operatorAllLeads),
+    [operatorAllLeads, panelCampaignId]
+  );
+  const operatorOverallStats = useMemo(() => computeStats(operatorScopedLeads), [operatorScopedLeads]);
+
+  // Contribuição por campanha — só faz sentido mostrar quando "todas as
+  // campanhas" está selecionado (senão é a mesma campanha repetida).
+  const operatorCampaignBreakdown = useMemo(
+    () =>
+      campaigns
+        .map((c) => ({
+          campaignId: c.id,
+          campaignName: c.name,
+          ...computeStats(operatorAllLeads.filter((l) => l.campaign_id === c.id)),
+        }))
+        .filter((c) => c.total > 0)
+        .sort((a, b) => b.interested - a.interested),
+    [campaigns, operatorAllLeads]
+  );
+
   return (
     <>
       <Navbar userEmail={userEmail} />
@@ -276,10 +363,36 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             <span className="italic text-accent">Operador</span>
           </h1>
           <p className="mt-5 max-w-xl text-ink-muted">
-            Selecione o operador, a campanha e o dia para ver o desempenho e comparar com as outras campanhas.
+            Veja o desempenho do dia numa campanha específica, ou abra o painel de um operador com tudo que ele já
+            fez em todas as campanhas — e o ranking geral entre operadores.
           </p>
         </header>
 
+        <div className="print:hidden mb-8 inline-flex items-center gap-1 rounded-xl border border-ink/10 bg-paper p-1">
+          <button
+            type="button"
+            onClick={() => setMode("diario")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              mode === "diario" ? "bg-accent text-white shadow-ember" : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <CalendarDays size={15} />
+            Relatório Diário
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("operador")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
+              mode === "operador" ? "bg-accent text-white shadow-ember" : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <UserRound size={15} />
+            Painel do Operador
+          </button>
+        </div>
+
+        {mode === "diario" && (
+        <>
         <section className="print:hidden mb-10 grid grid-cols-1 gap-4 rounded-3xl border border-ink/5 bg-paper p-7 shadow-card sm:grid-cols-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink-muted">
@@ -347,7 +460,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                 {rank !== null && campaigns.length > 1 && (
                   <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
                     <Trophy size={14} />
-                    {rankLabel(rank)} em interessados, entre {campaigns.length} campanhas
+                    {positionLabel(rank)} do dia em interessados, entre {campaigns.length} campanhas
                   </span>
                 )}
               </div>
@@ -555,6 +668,207 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             </div>
           </div>
         )}
+        </>
+        )}
+
+        {mode === "operador" && (
+          <>
+            <section className="print:hidden mb-10 grid grid-cols-1 gap-4 rounded-3xl border border-ink/5 bg-paper p-7 shadow-card sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-ink-muted">Operador (opcional)</label>
+                <select
+                  value={panelOperatorId}
+                  onChange={(e) => setPanelOperatorId(e.target.value)}
+                  className="w-full rounded-xl border border-ink/10 bg-ink/5 px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10"
+                >
+                  <option value="">Todos os operadores</option>
+                  {operators.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-ink-muted">Campanha (opcional)</label>
+                <select
+                  value={panelCampaignId}
+                  onChange={(e) => setPanelCampaignId(e.target.value)}
+                  className="w-full rounded-xl border border-ink/10 bg-ink/5 px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10"
+                >
+                  <option value="">Todas as campanhas</option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </section>
+
+            <div className="space-y-8">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
+                  <Award size={20} className="text-accent" />
+                  Ranking de Operadores
+                </h2>
+                <p className="mb-6 text-sm text-ink-muted">
+                  {panelCampaign
+                    ? `Somente em ${panelCampaign.name}, todo o período`
+                    : "Todas as campanhas, todo o período"}{" "}
+                  · direto da conta de cada operador cadastrado
+                </p>
+
+                {operators.length === 0 ? (
+                  <p className="text-sm text-ink-muted">Nenhum operador cadastrado ainda.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-ink/10 text-xs uppercase tracking-wide text-ink-muted">
+                          <th className="px-2 py-3 font-medium">#</th>
+                          <th className="px-2 py-3 font-medium">Operador</th>
+                          <th className="px-2 py-3 font-medium">Conta</th>
+                          <th className="px-2 py-3 text-right font-medium">Ligações</th>
+                          <th className="px-2 py-3 text-right font-medium">Interessados</th>
+                          <th className="px-2 py-3 text-right font-medium">Taxa de conversão</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {operatorLeaderboard.map((o, i) => {
+                          const op = operators.find((op) => op.id === o.operatorId);
+                          return (
+                            <tr
+                              key={o.operatorId}
+                              className={`border-b border-ink/5 last:border-0 ${
+                                o.operatorId === panelOperatorId ? "bg-accent/5" : ""
+                              }`}
+                            >
+                              <td className="px-2 py-3 font-semibold text-ink-muted">{rankMedal(i + 1)}</td>
+                              <td className="px-2 py-3 font-medium text-ink">{o.operatorName}</td>
+                              <td className="px-2 py-3">
+                                <OperatorStatusDot status={op?.status} />
+                              </td>
+                              <td className="px-2 py-3 text-right tabular-nums text-ink-muted">{o.total}</td>
+                              <td className="px-2 py-3 text-right tabular-nums font-semibold text-emerald-400">
+                                {o.interested}
+                              </td>
+                              <td className="px-2 py-3 text-right tabular-nums text-ink-muted">
+                                {o.taxaConversao.toFixed(1)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {!panelOperatorId && (
+                <div className="rounded-3xl border border-ink/5 bg-paper p-12 text-center shadow-card">
+                  <p className="text-ink-muted">Selecione um operador acima para ver o painel individual completo.</p>
+                </div>
+              )}
+
+              {panelOperatorId && (
+                <>
+                  <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                    <p className="eyebrow mb-2">Painel do operador</p>
+                    <h2 className="font-serif text-3xl font-semibold tracking-tight">{panelOperator?.name}</h2>
+                    <p className="mt-1 text-ink-muted">
+                      {panelCampaign ? `Somente em ${panelCampaign.name}` : "Todas as campanhas · histórico completo"}
+                    </p>
+                    {panelOperatorRank !== null && operatorLeaderboard.length > 1 && (
+                      <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                        <Trophy size={14} />
+                        {positionLabel(panelOperatorRank)} no ranking geral, entre {operatorLeaderboard.length} operadores
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    <StatCard icon={<PhoneOutgoing size={18} />} label="Ligações no total" value={operatorOverallStats.total} />
+                    <StatCard
+                      icon={<PhoneForwarded size={18} />}
+                      label="Transferidas"
+                      value={operatorOverallStats.transferred}
+                      tone="text-go"
+                    />
+                    <StatCard
+                      icon={<Voicemail size={18} />}
+                      label="Caixa postal"
+                      value={operatorOverallStats.voicemail}
+                      tone="text-orange-400"
+                    />
+                    <StatCard
+                      icon={<PhoneOff size={18} />}
+                      label="Sem sucesso"
+                      value={operatorOverallStats.noAnswer}
+                      tone="text-ink-muted"
+                    />
+                    <StatCard
+                      icon={<Check size={18} />}
+                      label="Interessados"
+                      value={operatorOverallStats.interested}
+                      tone="text-emerald-400"
+                    />
+                    <StatCard
+                      icon={<Square size={18} />}
+                      label="Retornar depois"
+                      value={operatorOverallStats.callback}
+                      tone="text-amber-400"
+                    />
+                    <StatCard
+                      icon={<X size={18} />}
+                      label="Descartados"
+                      value={operatorOverallStats.discarded}
+                      tone="text-accent"
+                    />
+                    <StatCard
+                      icon={<Percent size={18} />}
+                      label="Taxa de conversão"
+                      value={`${operatorOverallStats.taxaConversao.toFixed(1)}%`}
+                    />
+                  </div>
+
+                  {!panelCampaignId && (
+                    <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                      <h2 className="mb-1 font-serif text-2xl tracking-tight">Desempenho por campanha</h2>
+                      <p className="mb-6 text-sm text-ink-muted">Contribuição de {panelOperator?.name} em cada campanha que já trabalhou</p>
+                      {operatorCampaignBreakdown.length === 0 ? (
+                        <p className="text-sm text-ink-muted">Este operador ainda não trabalhou nenhum lead.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-ink/10 text-xs uppercase tracking-wide text-ink-muted">
+                                <th className="px-2 py-3 font-medium">Campanha</th>
+                                <th className="px-2 py-3 text-right font-medium">Ligações</th>
+                                <th className="px-2 py-3 text-right font-medium">Interessados</th>
+                                <th className="px-2 py-3 text-right font-medium">Taxa de conversão</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {operatorCampaignBreakdown.map((c) => (
+                                <tr key={c.campaignId} className="border-b border-ink/5 last:border-0">
+                                  <td className="px-2 py-3 font-medium text-ink">{c.campaignName}</td>
+                                  <td className="px-2 py-3 text-right tabular-nums text-ink-muted">{c.total}</td>
+                                  <td className="px-2 py-3 text-right tabular-nums font-semibold text-emerald-400">{c.interested}</td>
+                                  <td className="px-2 py-3 text-right tabular-nums text-ink-muted">{c.taxaConversao.toFixed(1)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </main>
 
       <Footer />
@@ -600,6 +914,25 @@ function OutcomePill({ outcome }: { outcome: LeadOutcome | null }) {
   const info = map[outcome];
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${info.className}`}>
+      {info.label}
+    </span>
+  );
+}
+
+const OPERATOR_STATUS_DOT: Record<OperatorStatus, { label: string; dot: string }> = {
+  available: { label: "Disponível", dot: "bg-emerald-500" },
+  busy: { label: "Ocupado", dot: "bg-amber-500" },
+  offline: { label: "Offline", dot: "bg-stone-400" },
+};
+
+// Status ao vivo da conta do operador — mostra que o ranking reflete quem
+// está realmente cadastrado e ativo no sistema, não uma lista fixa.
+function OperatorStatusDot({ status }: { status?: OperatorStatus }) {
+  if (!status) return <span className="text-xs text-ink-muted">—</span>;
+  const info = OPERATOR_STATUS_DOT[status];
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+      <span className={`h-2 w-2 rounded-full ${info.dot}`} />
       {info.label}
     </span>
   );

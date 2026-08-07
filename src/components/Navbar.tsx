@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Menu, X, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +15,7 @@ const NAV_LINKS = [
   { label: "Painel", href: "#painel" },
   { label: "Operadores", href: "#operadores" },
   { label: "Ligações", href: "#ligacoes" },
+  { label: "Relatório", href: "/relatorio" },
 ];
 
 export default function Navbar({ userEmail }: NavbarProps) {
@@ -29,7 +31,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
 
   return (
     // Navbar SEMPRE sticky no topo
-    <header className="sticky top-0 z-50 border-b border-ink/5 bg-canvas/70 backdrop-blur-xl">
+    <header className="print:hidden sticky top-0 z-50 border-b border-ink/5 bg-canvas/70 backdrop-blur-xl">
       {/* Faixa fina de acento da marca no topo absoluto */}
       <div className="brand-rule h-0.5 w-full" />
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
@@ -50,14 +52,14 @@ export default function Navbar({ userEmail }: NavbarProps) {
         {/* Links desktop */}
         <div className="hidden items-center gap-8 md:flex">
           {NAV_LINKS.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className="group relative text-sm font-medium text-ink-muted transition-colors hover:text-ink"
             >
               {link.label}
               <span className="absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 bg-accent transition-transform duration-300 group-hover:scale-x-100" />
-            </a>
+            </Link>
           ))}
         </div>
 
@@ -91,14 +93,14 @@ export default function Navbar({ userEmail }: NavbarProps) {
           >
             <div className="flex flex-col gap-1">
               {NAV_LINKS.map((link) => (
-                <a
+                <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setOpen(false)}
                   className="rounded-lg px-3 py-3 font-serif text-2xl text-ink transition-colors hover:bg-ink/5"
                 >
                   {link.label}
-                </a>
+                </Link>
               ))}
             </div>
 

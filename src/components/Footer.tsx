@@ -11,7 +11,7 @@ export default function Footer() {
   }
 
   return (
-    <footer className="relative mt-20 border-t border-ink/10 bg-canvas">
+    <footer className="print:hidden relative mt-20 border-t border-ink/10 bg-canvas">
       <div className="mx-auto max-w-6xl px-5 py-10">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
           {/* Marca V4 */}

@@ -73,13 +73,18 @@ export default function Dashboard({ userId, userEmail }: DashboardProps) {
     }
   }, [supabase]);
 
+  // Cada operador tem a própria conta/ramal — o Painel só mostra e controla
+  // o operador da PRÓPRIA conta logada, não o time inteiro (mesmo o RLS
+  // liberando o time todo pra leitura). A visão do time inteiro fica só no
+  // Relatório, que consulta operators sem esse filtro por user_id.
   const loadOperators = useCallback(async () => {
     const { data } = await supabase
       .from("operators")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
     if (data) setOperators(data);
-  }, [supabase]);
+  }, [supabase, userId]);
 
   const loadLeads = useCallback(
     async (campaignId: string) => {

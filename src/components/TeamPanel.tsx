@@ -102,8 +102,8 @@ export default function TeamPanel({ userEmail }: TeamPanelProps) {
             <span className="italic text-accent">Equipe</span>
           </h1>
           <p className="mt-5 max-w-xl text-ink-muted">
-            Operadores, campanhas e leads são compartilhados dentro de um time. Convide colegas com o código
-            abaixo, ou entre num time existente se alguém já te passou um código.
+            Toda conta nova já entra automaticamente no mesmo time — não precisa de convite nem código pra isso.
+            O código abaixo só serve pra casos avançados (ex.: reunir um time que ficou separado por engano).
           </p>
         </header>
 

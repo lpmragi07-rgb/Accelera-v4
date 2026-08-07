@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseLeadsCsv } from "@/lib/csv";
 import { toE164 } from "@/lib/phone";
+import { getMyTeamId } from "@/lib/team";
 
 // POST /api/leads/upload
 // Recebe um CSV (multipart/form-data) + nome da campanha.
@@ -16,6 +17,14 @@ export async function POST(req: NextRequest) {
 
   if (authError || !user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+
+  const teamId = await getMyTeamId(supabase);
+  if (!teamId) {
+    return NextResponse.json(
+      { error: "Não foi possível identificar o time da sua conta. Recarregue a página e tente de novo." },
+      { status: 500 }
+    );
   }
 
   const formData = await req.formData();
@@ -43,6 +52,7 @@ export async function POST(req: NextRequest) {
     .from("campaigns")
     .insert({
       user_id: user.id,
+      team_id: teamId,
       name: campaignName,
       status: "draft",
       total_leads: leads.length,
@@ -60,6 +70,7 @@ export async function POST(req: NextRequest) {
   // Insere os leads normalizando o telefone para E.164
   const rows = leads.map((l) => ({
     user_id: user.id,
+    team_id: teamId,
     campaign_id: campaign.id,
     company_name: l.company_name,
     phone: toE164(l.phone),

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { UserPlus, Trash2, Loader2, Headphones, PhoneCall, Building2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getMyTeamId } from "@/lib/team";
 import type { Lead, Operator, OperatorStatus } from "@/types/database";
 
 interface OperatorsPanelProps {
@@ -33,8 +34,16 @@ export default function OperatorsPanel({
     e.preventDefault();
     if (!name.trim() || !extension.trim()) return;
     setSaving(true);
+
+    const teamId = await getMyTeamId(supabase);
+    if (!teamId) {
+      setSaving(false);
+      return;
+    }
+
     await supabase.from("operators").insert({
       user_id: userId,
+      team_id: teamId,
       name: name.trim(),
       extension: extension.trim(),
       status: "available",

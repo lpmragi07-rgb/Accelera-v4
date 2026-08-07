@@ -57,6 +57,10 @@ export default function Dashboard({ userId, userEmail }: DashboardProps) {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [dialing, setDialing] = useState(false);
   const [dialMsg, setDialMsg] = useState<string | null>(null);
+  // Leads que o operador acabou de qualificar nesta sessão — ficam perto do
+  // topo mesmo depois de marcados, caso ele tenha clicado errado e precise
+  // corrigir (em vez de "sumir" pra baixo da lista imediatamente).
+  const [recentlyQualifiedIds, setRecentlyQualifiedIds] = useState<Set<string>>(new Set());
 
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase
@@ -214,6 +218,10 @@ export default function Dashboard({ userId, userEmail }: DashboardProps) {
       setLeads((prev) =>
         prev.map((l) => (l.id === leadId ? { ...l, outcome } : l))
       );
+
+      if (outcome) {
+        setRecentlyQualifiedIds((prev) => new Set(prev).add(leadId));
+      }
 
       const { error } = await supabase
         .from("leads")
@@ -381,11 +389,13 @@ export default function Dashboard({ userId, userEmail }: DashboardProps) {
     return map;
   }, [leads]);
 
-  // Ordenação: em ligação → aguardando qualificação → pendentes → resto.
+  // Ordenação: em ligação → aguardando qualificação (ou acabou de ser
+  // qualificado, pra permitir corrigir) → pendentes → resto.
   const sortedLeads = useMemo(() => {
     const priority = (lead: Lead) => {
       if (leadIsLive(lead)) return 0;
       if (leadNeedsQualification(lead)) return 1;
+      if (recentlyQualifiedIds.has(lead.id)) return 1;
       if (lead.status === "pending") return 2;
       return 3;
     };
@@ -405,7 +415,7 @@ export default function Dashboard({ userId, userEmail }: DashboardProps) {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     });
-  }, [leads]);
+  }, [leads, recentlyQualifiedIds]);
 
   return (
     <>

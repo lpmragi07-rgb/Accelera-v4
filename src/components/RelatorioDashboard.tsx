@@ -196,6 +196,14 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
     loadDayLeads(date);
   }, [date, loadDayLeads]);
 
+  // Operadores com pelo menos uma atualização nos últimos 30 dias — filtra
+  // contas inativas/abandonadas das listas e do ranking do relatório (o
+  // cadastro deles continua existindo, só não polui mais aqui).
+  const activeOperators = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return operators.filter((o) => new Date(o.updated_at).getTime() >= cutoff);
+  }, [operators]);
+
   // Tendência de 7 dias (até o dia selecionado) para este operador nesta campanha.
   useEffect(() => {
     if (!operatorId || !campaignId) {
@@ -265,14 +273,14 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
   const operatorRanking = useMemo(() => {
     if (!campaignId) return [];
     const campaignLeads = dayLeads.filter((l) => l.campaign_id === campaignId);
-    return operators
+    return activeOperators
       .map((o) => ({
         operatorId: o.id,
         operatorName: o.name,
         interested: campaignLeads.filter((l) => l.operator_id === o.id && l.outcome === "interested").length,
       }))
       .sort((a, b) => b.interested - a.interested);
-  }, [campaignId, dayLeads, operators]);
+  }, [campaignId, dayLeads, activeOperators]);
 
   const trendSeries = useMemo(() => {
     const days = Array.from({ length: 7 }, (_, i) => daysBefore(date, 6 - i));
@@ -309,14 +317,14 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
 
   const operatorLeaderboard = useMemo(
     () =>
-      operators
+      activeOperators
         .map((o) => ({
           operatorId: o.id,
           operatorName: o.name,
           ...computeStats(leaderboardLeads.filter((l) => l.operator_id === o.id)),
         }))
         .sort((a, b) => b.interested - a.interested),
-    [operators, leaderboardLeads]
+    [activeOperators, leaderboardLeads]
   );
 
   const panelOperatorRank = panelOperatorId
@@ -414,7 +422,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
               className="w-full rounded-xl border border-ink/10 bg-ink/5 px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10"
             >
               <option value="">Selecione o operador...</option>
-              {operators.map((o) => (
+              {activeOperators.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>
@@ -682,7 +690,7 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                   className="w-full rounded-xl border border-ink/10 bg-ink/5 px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10"
                 >
                   <option value="">Todos os operadores</option>
-                  {operators.map((o) => (
+                  {activeOperators.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
                     </option>
@@ -719,8 +727,12 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
                   · direto da conta de cada operador cadastrado
                 </p>
 
-                {operators.length === 0 ? (
-                  <p className="text-sm text-ink-muted">Nenhum operador cadastrado ainda.</p>
+                {activeOperators.length === 0 ? (
+                  <p className="text-sm text-ink-muted">
+                    {operators.length === 0
+                      ? "Nenhum operador cadastrado ainda."
+                      : "Nenhum operador ativo nos últimos 30 dias."}
+                  </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">

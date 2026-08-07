@@ -16,7 +16,6 @@ const NAV_LINKS = [
   { label: "Operadores", href: "/#operadores" },
   { label: "Ligações", href: "/#ligacoes" },
   { label: "Relatório", href: "/relatorio" },
-  { label: "Equipe", href: "/equipe" },
 ];
 
 export default function Navbar({ userEmail }: NavbarProps) {

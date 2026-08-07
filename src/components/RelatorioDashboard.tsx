@@ -13,15 +13,23 @@ import {
   Printer,
   Trophy,
   Loader2,
+  PieChart,
+  TrendingUp,
+  Users,
+  Building2,
+  Phone,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import CampaignComparisonChart from "./CampaignComparisonChart";
+import OutcomeDonutChart from "./OutcomeDonutChart";
+import MiniTrendChart from "./MiniTrendChart";
+import StatusBadge from "./StatusBadge";
 import type { Campaign, Operator, LeadStatus, LeadOutcome } from "@/types/database";
 
-// Recorte de "leads" só com as colunas usadas no relatório — mais leve que
-// carregar a linha inteira (empresa, telefone, gravação etc. não importam aqui).
+// Recorte de "leads" só com as colunas usadas nos agregados do relatório —
+// mais leve que carregar a linha inteira (gravação, notas etc. não importam aqui).
 interface DayLeadRow {
   id: string;
   campaign_id: string;
@@ -31,8 +39,46 @@ interface DayLeadRow {
   updated_at: string;
 }
 
+interface DetailLeadRow {
+  id: string;
+  company_name: string | null;
+  phone: string;
+  status: LeadStatus;
+  outcome: LeadOutcome | null;
+  updated_at: string;
+}
+
+interface CampaignStats {
+  total: number;
+  transferred: number;
+  voicemail: number;
+  noAnswer: number;
+  interested: number;
+  callback: number;
+  discarded: number;
+  taxaConversao: number;
+}
+
+function computeStats(leads: { status: LeadStatus; outcome: LeadOutcome | null }[]): CampaignStats {
+  const total = leads.length;
+  const transferred = leads.filter((l) => l.status === "transferred").length;
+  const voicemail = leads.filter((l) => l.status === "voicemail").length;
+  const noAnswer = leads.filter((l) => l.status === "no_answer" || l.status === "failed").length;
+  const interested = leads.filter((l) => l.outcome === "interested").length;
+  const callback = leads.filter((l) => l.outcome === "callback").length;
+  const discarded = leads.filter((l) => l.outcome === "discarded").length;
+  const taxaConversao = total > 0 ? (interested / total) * 100 : 0;
+  return { total, transferred, voicemail, noAnswer, interested, callback, discarded, taxaConversao };
+}
+
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function daysBefore(dateStr: string, n: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
 }
 
 function formatFullDate(dateStr: string): string {
@@ -53,6 +99,17 @@ function rankLabel(rank: number): string {
   return `${rank}º lugar do dia`;
 }
 
+const COMPARISON_ROWS: { label: string; key: keyof CampaignStats; format?: "percent"; lowerIsBetter?: boolean }[] = [
+  { label: "Ligações no dia", key: "total" },
+  { label: "Transferidas", key: "transferred" },
+  { label: "Caixa postal", key: "voicemail", lowerIsBetter: true },
+  { label: "Sem sucesso", key: "noAnswer", lowerIsBetter: true },
+  { label: "Interessados", key: "interested" },
+  { label: "Retornar depois", key: "callback" },
+  { label: "Descartados", key: "discarded", lowerIsBetter: true },
+  { label: "Taxa de conversão", key: "taxaConversao", format: "percent" },
+];
+
 interface RelatorioDashboardProps {
   userId: string;
   userEmail: string | null;
@@ -64,11 +121,14 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [dayLeads, setDayLeads] = useState<DayLeadRow[]>([]);
+  const [trendLeads, setTrendLeads] = useState<DayLeadRow[]>([]);
+  const [detailLeads, setDetailLeads] = useState<DetailLeadRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [date, setDate] = useState(todayStr());
   const [operatorId, setOperatorId] = useState("");
   const [campaignId, setCampaignId] = useState("");
+  const [compareCampaignId, setCompareCampaignId] = useState("");
 
   useEffect(() => {
     supabase
@@ -104,41 +164,104 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
     loadDayLeads(date);
   }, [date, loadDayLeads]);
 
+  // Tendência de 7 dias (até o dia selecionado) para este operador nesta campanha.
+  useEffect(() => {
+    if (!operatorId || !campaignId) {
+      setTrendLeads([]);
+      return;
+    }
+    const rangeStart = new Date(`${daysBefore(date, 6)}T00:00:00`).toISOString();
+    const rangeEnd = new Date(`${date}T23:59:59.999`).toISOString();
+    supabase
+      .from("leads")
+      .select("id, campaign_id, operator_id, status, outcome, updated_at")
+      .eq("campaign_id", campaignId)
+      .eq("operator_id", operatorId)
+      .gte("updated_at", rangeStart)
+      .lte("updated_at", rangeEnd)
+      .then(({ data }) => setTrendLeads((data as DayLeadRow[]) || []));
+  }, [operatorId, campaignId, date, supabase]);
+
+  // Detalhamento: leads deste operador, nesta campanha, atualizados no dia.
+  useEffect(() => {
+    if (!operatorId || !campaignId) {
+      setDetailLeads([]);
+      return;
+    }
+    const dayStart = new Date(`${date}T00:00:00`).toISOString();
+    const dayEnd = new Date(`${date}T23:59:59.999`).toISOString();
+    supabase
+      .from("leads")
+      .select("id, company_name, phone, status, outcome, updated_at")
+      .eq("campaign_id", campaignId)
+      .eq("operator_id", operatorId)
+      .gte("updated_at", dayStart)
+      .lte("updated_at", dayEnd)
+      .order("updated_at", { ascending: false })
+      .limit(50)
+      .then(({ data }) => setDetailLeads((data as DetailLeadRow[]) || []));
+  }, [operatorId, campaignId, date, supabase]);
+
   // Leads deste operador, nesta campanha, atualizados no dia selecionado.
   const operatorCampaignLeads = useMemo(
     () => dayLeads.filter((l) => l.campaign_id === campaignId && l.operator_id === operatorId),
     [dayLeads, campaignId, operatorId]
   );
+  const metrics = useMemo(() => computeStats(operatorCampaignLeads), [operatorCampaignLeads]);
 
-  const metrics = useMemo(() => {
-    const total = operatorCampaignLeads.length;
-    const transferred = operatorCampaignLeads.filter((l) => l.status === "transferred").length;
-    const voicemail = operatorCampaignLeads.filter((l) => l.status === "voicemail").length;
-    const noAnswer = operatorCampaignLeads.filter((l) => l.status === "no_answer" || l.status === "failed").length;
-    const interested = operatorCampaignLeads.filter((l) => l.outcome === "interested").length;
-    const callback = operatorCampaignLeads.filter((l) => l.outcome === "callback").length;
-    const discarded = operatorCampaignLeads.filter((l) => l.outcome === "discarded").length;
-    const taxaConversao = total > 0 ? (interested / total) * 100 : 0;
-    return { total, transferred, voicemail, noAnswer, interested, callback, discarded, taxaConversao };
-  }, [operatorCampaignLeads]);
-
-  // Comparação entre campanhas no dia (todos os operadores) — quem converteu
-  // mais interessados, pra saber onde a campanha selecionada se posiciona.
-  const comparison = useMemo(() => {
-    return campaigns
-      .map((c) => {
-        const leads = dayLeads.filter((l) => l.campaign_id === c.id);
-        const interested = leads.filter((l) => l.outcome === "interested").length;
-        return { campaignId: c.id, campaignName: c.name, interested };
-      })
-      .sort((a, b) => b.interested - a.interested);
+  // Estatísticas do dia por campanha inteira (todos os operadores) — base
+  // tanto do gráfico de comparação quanto da comparação direta entre duas.
+  const campaignDayStats = useMemo(() => {
+    const map = new Map<string, CampaignStats>();
+    for (const c of campaigns) {
+      map.set(c.id, computeStats(dayLeads.filter((l) => l.campaign_id === c.id)));
+    }
+    return map;
   }, [campaigns, dayLeads]);
+
+  const comparison = useMemo(
+    () =>
+      campaigns
+        .map((c) => ({ campaignId: c.id, campaignName: c.name, interested: campaignDayStats.get(c.id)?.interested ?? 0 }))
+        .sort((a, b) => b.interested - a.interested),
+    [campaigns, campaignDayStats]
+  );
 
   const rank = campaignId ? comparison.findIndex((c) => c.campaignId === campaignId) + 1 || null : null;
 
+  // Ranking de operadores dentro da campanha selecionada, no dia.
+  const operatorRanking = useMemo(() => {
+    if (!campaignId) return [];
+    const campaignLeads = dayLeads.filter((l) => l.campaign_id === campaignId);
+    return operators
+      .map((o) => ({
+        operatorId: o.id,
+        operatorName: o.name,
+        interested: campaignLeads.filter((l) => l.operator_id === o.id && l.outcome === "interested").length,
+      }))
+      .sort((a, b) => b.interested - a.interested);
+  }, [campaignId, dayLeads, operators]);
+
+  const trendSeries = useMemo(() => {
+    const days = Array.from({ length: 7 }, (_, i) => daysBefore(date, 6 - i));
+    return days.map((d) => ({
+      date: d,
+      value: trendLeads.filter((l) => l.updated_at.slice(0, 10) === d).length,
+    }));
+  }, [trendLeads, date]);
+
   const selectedOperator = operators.find((o) => o.id === operatorId);
   const selectedCampaign = campaigns.find((c) => c.id === campaignId);
+  const compareCampaign = campaigns.find((c) => c.id === compareCampaignId);
   const showReport = Boolean(operatorId && campaignId);
+
+  const primaryStats = campaignId ? campaignDayStats.get(campaignId) : undefined;
+  const compareStats = compareCampaignId ? campaignDayStats.get(compareCampaignId) : undefined;
+
+  function handleBarClick(id: string) {
+    if (id === campaignId) return;
+    setCompareCampaignId((prev) => (prev === id ? "" : id));
+  }
 
   return (
     <>
@@ -189,7 +312,10 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
             <label className="mb-1.5 block text-sm font-medium text-ink-muted">Campanha</label>
             <select
               value={campaignId}
-              onChange={(e) => setCampaignId(e.target.value)}
+              onChange={(e) => {
+                setCampaignId(e.target.value);
+                if (e.target.value === compareCampaignId) setCompareCampaignId("");
+              }}
               className="w-full rounded-xl border border-ink/10 bg-ink/5 px-3.5 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10"
             >
               <option value="">Selecione a campanha...</option>
@@ -245,18 +371,187 @@ export default function RelatorioDashboard({ userEmail }: RelatorioDashboardProp
               <StatCard icon={<Percent size={18} />} label="Taxa de conversão" value={`${metrics.taxaConversao.toFixed(1)}%`} />
             </div>
 
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
+                  <PieChart size={20} className="text-accent" />
+                  Qualificação do dia
+                </h2>
+                <p className="mb-6 text-sm text-ink-muted">Como este operador qualificou os leads desta campanha hoje</p>
+                <OutcomeDonutChart
+                  segments={[
+                    { label: "Interessados", value: metrics.interested, color: "#34D399" },
+                    { label: "Retornar depois", value: metrics.callback, color: "#FBBF24" },
+                    { label: "Descartados", value: metrics.discarded, color: "#EC1C24" },
+                  ]}
+                />
+              </div>
+
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
+                  <TrendingUp size={20} className="text-accent" />
+                  Tendência · 7 dias
+                </h2>
+                <p className="mb-6 text-sm text-ink-muted">Ligações trabalhadas por dia, mesmo operador e campanha</p>
+                <MiniTrendChart points={trendSeries} />
+              </div>
+            </div>
+
+            {operatorRanking.length > 1 && (
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                <h2 className="mb-1 flex items-center gap-2 font-serif text-2xl tracking-tight">
+                  <Users size={20} className="text-accent" />
+                  Ranking de operadores nesta campanha
+                </h2>
+                <p className="mb-6 text-sm text-ink-muted">Interessados no dia, apenas em {selectedCampaign?.name}</p>
+                <CampaignComparisonChart
+                  bars={operatorRanking.map((o) => ({
+                    id: o.operatorId,
+                    label: o.operatorName,
+                    value: o.interested,
+                    highlight: o.operatorId === operatorId,
+                  }))}
+                />
+              </div>
+            )}
+
             <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
-              <h2 className="mb-1 font-serif text-2xl tracking-tight">
-                {selectedCampaign?.name} vs. outras campanhas
-              </h2>
-              <p className="mb-6 text-sm text-ink-muted">Interessados no dia, todas as campanhas, todos os operadores</p>
+              <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl tracking-tight">
+                    {campaigns.length > 1 ? <>{selectedCampaign?.name} vs. outras campanhas</> : "Comparação entre campanhas"}
+                  </h2>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {campaigns.length > 1
+                      ? "Interessados no dia · clique numa barra para comparar diretamente com a campanha selecionada"
+                      : "Aparece assim que houver mais de uma campanha cadastrada"}
+                  </p>
+                </div>
+                {campaigns.length > 1 && (
+                  <div className="print:hidden flex items-center gap-2">
+                    <label className="text-xs font-medium text-ink-muted">Comparar com</label>
+                    <select
+                      value={compareCampaignId}
+                      onChange={(e) => setCompareCampaignId(e.target.value)}
+                      className="rounded-lg border border-ink/10 bg-ink/5 px-2.5 py-1.5 text-xs outline-none transition focus:border-sky-400"
+                    >
+                      <option value="">Clique numa barra...</option>
+                      {campaigns
+                        .filter((c) => c.id !== campaignId)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+              </div>
               <CampaignComparisonChart
                 bars={comparison.map((c) => ({
+                  id: c.campaignId,
                   label: c.campaignName,
                   value: c.interested,
                   highlight: c.campaignId === campaignId,
+                  compareActive: c.campaignId === compareCampaignId,
                 }))}
+                onBarClick={handleBarClick}
               />
+            </div>
+
+            {compareCampaignId && compareStats && primaryStats && (
+              <div className="rounded-3xl border border-ink/5 bg-paper p-8 shadow-card">
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h2 className="font-serif text-2xl tracking-tight">Comparação direta</h2>
+                    <p className="mt-1 text-sm text-ink-muted">Todas as métricas do dia, campanha a campanha (todos os operadores)</p>
+                  </div>
+                  <button
+                    onClick={() => setCompareCampaignId("")}
+                    className="print:hidden flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-ink/5 hover:text-ink"
+                  >
+                    <X size={14} />
+                    Remover comparação
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-ink/10 text-xs uppercase tracking-wide text-ink-muted">
+                        <th className="py-3 pr-4 font-medium">Métrica</th>
+                        <th className="py-3 px-4 font-medium text-accent">{selectedCampaign?.name}</th>
+                        <th className="py-3 pl-4 font-medium text-sky-400">{compareCampaign?.name}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {COMPARISON_ROWS.map((row) => {
+                        const a = primaryStats[row.key];
+                        const b = compareStats[row.key];
+                        const fmt = (v: number) => (row.format === "percent" ? `${v.toFixed(1)}%` : v.toLocaleString("pt-BR"));
+                        const aWins = row.lowerIsBetter ? a < b : a > b;
+                        const bWins = row.lowerIsBetter ? b < a : b > a;
+                        return (
+                          <tr key={row.key} className="border-b border-ink/5 last:border-0">
+                            <td className="py-3 pr-4 text-ink-muted">{row.label}</td>
+                            <td className={`py-3 px-4 tabular-nums ${aWins ? "font-bold text-accent" : "text-ink"}`}>{fmt(a)}</td>
+                            <td className={`py-3 pl-4 tabular-nums ${bWins ? "font-bold text-sky-400" : "text-ink"}`}>{fmt(b)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-ink/5 bg-paper shadow-card">
+              <div className="p-8 pb-0">
+                <h2 className="font-serif text-2xl tracking-tight">Leads trabalhados no dia</h2>
+                <p className="mt-1 text-sm text-ink-muted">
+                  {selectedOperator?.name} em {selectedCampaign?.name} — últimos {detailLeads.length} atendimentos
+                </p>
+              </div>
+              {detailLeads.length === 0 ? (
+                <p className="px-8 py-10 text-center text-sm text-ink-muted">Nenhum lead atendido neste dia ainda.</p>
+              ) : (
+                <div className="overflow-x-auto p-8 pt-6">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-ink/5 text-xs uppercase tracking-wide text-ink-muted">
+                        <th className="px-2 py-3 font-medium">Empresa</th>
+                        <th className="px-2 py-3 font-medium">Telefone</th>
+                        <th className="px-2 py-3 font-medium">Status</th>
+                        <th className="px-2 py-3 font-medium">Qualificação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailLeads.map((lead) => (
+                        <tr key={lead.id} className="border-b border-ink/5 last:border-0">
+                          <td className="px-2 py-3">
+                            <div className="flex items-center gap-2">
+                              <Building2 size={14} className="shrink-0 text-ink-muted" />
+                              <span className="font-medium text-ink">{lead.company_name || "—"}</span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-3">
+                            <div className="flex items-center gap-2 text-ink-muted">
+                              <Phone size={13} />
+                              {lead.phone}
+                            </div>
+                          </td>
+                          <td className="px-2 py-3">
+                            <StatusBadge status={lead.status} />
+                          </td>
+                          <td className="px-2 py-3">
+                            <OutcomePill outcome={lead.outcome} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -289,5 +584,23 @@ function StatCard({
       </div>
       <p className="mt-4 text-[0.7rem] font-medium uppercase tracking-eyebrow text-ink-muted">{label}</p>
     </div>
+  );
+}
+
+// Selo de qualificação somente leitura (a edição fica no painel principal via OutcomeButtons).
+function OutcomePill({ outcome }: { outcome: LeadOutcome | null }) {
+  if (!outcome) {
+    return <span className="text-xs text-ink-muted">—</span>;
+  }
+  const map: Record<LeadOutcome, { label: string; className: string }> = {
+    interested: { label: "Interessado", className: "bg-emerald-500/15 text-emerald-300" },
+    callback: { label: "Retornar depois", className: "bg-amber-500/15 text-amber-300" },
+    discarded: { label: "Descartado", className: "bg-accent/15 text-accent" },
+  };
+  const info = map[outcome];
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${info.className}`}>
+      {info.label}
+    </span>
   );
 }
